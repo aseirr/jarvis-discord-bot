@@ -18,7 +18,7 @@ client = OpenAI(
 )
 
 # Faster than 120B
-MODEL = "openai/gpt-oss-20b"
+MODEL = "google/gemini-flash-latest"
 
 # Simple instant-response cache
 FAST_RESPONSES = {
