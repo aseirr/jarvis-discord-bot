@@ -24,6 +24,9 @@ bot = commands.Bot(
     intents=intents
 )
 
+# Channels where Jarvis is "awake"
+active_channels = set()
+
 
 # ---------------- READY EVENT ----------------
 @bot.event
@@ -37,104 +40,7 @@ async def on_ready():
     print(f"Logged in as {bot.user}")
 
 
-# ---------------- SLASH: PING ----------------
-@bot.tree.command(name="ping", description="Check if Jarvis is online")
-async def ping(interaction: discord.Interaction):
-    await interaction.response.send_message(
-        f"🏓 Pong! {round(bot.latency * 1000)}ms"
-    )
-
-
-# ---------------- SLASH: ASK (MAIN AI) ----------------
-@bot.tree.command(name="ask", description="Ask Jarvis anything")
-async def ask(interaction: discord.Interaction, question: str):
-
-    await interaction.response.defer()
-
-    channel_id = interaction.channel_id
-    user_id = interaction.user.id
-
-    # save user message
-    add_message(channel_id, "user", question)
-
-    # get history
-    history = get_history(channel_id)
-
-    # AI response
-    answer = ask_jarvis(user_id, question, history)
-
-    # save bot response
-    add_message(channel_id, "assistant", answer)
-
-    if len(answer) > 1900:
-        answer = answer[:1900] + "\n\n[truncated]"
-
-    await interaction.followup.send(answer)
-
-
-# ---------------- SLASH: MEMORY ----------------
-@bot.tree.command(name="remember", description="Store something in Jarvis memory")
-async def remember_command(interaction: discord.Interaction, fact: str):
-
-    remember(fact)
-
-    await interaction.response.send_message(
-        f"🧠 Remembered: {fact}"
-    )
-
-
-@bot.tree.command(name="recall", description="View Jarvis memory")
-async def recall_command(interaction: discord.Interaction):
-
-    memory = recall()
-
-    if not memory:
-        await interaction.response.send_message("I don't remember anything yet.")
-        return
-
-    text = "\n".join(f"{i+1}. {item}" for i, item in enumerate(memory))
-
-    await interaction.response.send_message(f"🧠 Memory:\n\n{text}")
-
-
-# ---------------- NORMAL CHAT COMMAND (ULTRA MODE) ----------------
-@bot.command(name="jarvis")
-async def jarvis(ctx, *, message: str):
-
-    channel_id = ctx.channel.id
-    user_id = ctx.author.id
-
-    msg_lower = message.lower()
-
-    # ---------------- SIMPLE COMMAND DETECTION ----------------
-    if "clear chat" in msg_lower:
-        clear_chat(channel_id)
-        await ctx.send("🧹 Chat cleared.")
-        return
-
-    if "remember this" in msg_lower:
-        remember_fact(message)
-        await ctx.send("🧠 Saved to memory.")
-        return
-
-    # ---------------- NORMAL AI FLOW ----------------
-    add_message(channel_id, "user", message)
-
-    history = get_history(channel_id)
-
-    answer = ask_jarvis(user_id, message, history)
-
-    add_message(channel_id, "assistant", answer)
-
-    if len(answer) > 1900:
-        answer = answer[:1900] + "\n\n[truncated]"
-
-    await ctx.send(answer)
-
-
-    
-# ---------------- WAKE WORD SYSTEM ----------------
-# ---------------- WAKE WORD + MENTION SYSTEM ----------------
+# ---------------- MESSAGE LISTENER ----------------
 @bot.event
 async def on_message(message):
 
@@ -142,47 +48,62 @@ async def on_message(message):
         return
 
     content = message.content.strip()
+    content_lower = content.lower()
+
+    channel_id = message.channel.id
+    user_id = message.author.id
+
+    # ---------------- WAKE UP ----------------
+    if content_lower == "wake up jarvis":
+
+        active_channels.add(channel_id)
+
+        await message.reply(
+            "🟢 Jarvis activated. I'm listening."
+        )
+        return
+
+    # ---------------- SLEEP ----------------
+    if content_lower == "exit jarvis":
+
+        active_channels.discard(channel_id)
+
+        await message.reply(
+            "🔴 Jarvis deactivated."
+        )
+        return
 
     triggered = False
-    user_message = ""
+    user_message = content
 
-    # Wake word
-    if content.lower().startswith("jarvis "):
+    # Jarvis already active in this channel
+    if channel_id in active_channels:
         triggered = True
-        user_message = content[7:].strip()
 
-    # Mention
+    # Mention "jarvis" anywhere
+    elif "jarvis" in content_lower:
+        triggered = True
+
+    # Discord mention
     elif bot.user and bot.user.mentioned_in(message):
-
-        user_message = content.replace(
-            f"<@{bot.user.id}>",
-            ""
-        ).replace(
-            f"<@!{bot.user.id}>",
-            ""
-        ).strip()
-
         triggered = True
 
-    if triggered and user_message:
-
-        channel_id = message.channel.id
-        user_id = message.author.id
+    if triggered:
 
         msg_lower = user_message.lower()
 
-        # ---------------- SIMPLE COMMANDS ----------------
+        # Clear chat
         if "clear chat" in msg_lower:
             clear_chat(channel_id)
             await message.reply("🧹 Chat cleared.")
             return
 
+        # Remember fact
         if "remember this" in msg_lower:
             remember_fact(user_message)
             await message.reply("🧠 Saved to memory.")
             return
 
-        # ---------------- AI FLOW ----------------
         add_message(
             channel_id,
             "user",
@@ -208,8 +129,134 @@ async def on_message(message):
 
         await message.reply(answer)
 
-    # Keep !commands working
     await bot.process_commands(message)
+
+
+# ---------------- SLASH: PING ----------------
+@bot.tree.command(
+    name="ping",
+    description="Check if Jarvis is online"
+)
+async def ping(interaction: discord.Interaction):
+
+    await interaction.response.send_message(
+        f"🏓 Pong! {round(bot.latency * 1000)}ms"
+    )
+
+
+# ---------------- SLASH: ASK ----------------
+@bot.tree.command(
+    name="ask",
+    description="Ask Jarvis anything"
+)
+async def ask(
+    interaction: discord.Interaction,
+    question: str
+):
+
+    await interaction.response.defer()
+
+    channel_id = interaction.channel_id
+    user_id = interaction.user.id
+
+    add_message(channel_id, "user", question)
+
+    history = get_history(channel_id)
+
+    answer = ask_jarvis(
+        user_id,
+        question,
+        history
+    )
+
+    add_message(
+        channel_id,
+        "assistant",
+        answer
+    )
+
+    if len(answer) > 1900:
+        answer = answer[:1900] + "\n\n[truncated]"
+
+    await interaction.followup.send(answer)
+
+
+# ---------------- SLASH: REMEMBER ----------------
+@bot.tree.command(
+    name="remember",
+    description="Store something in Jarvis memory"
+)
+async def remember_command(
+    interaction: discord.Interaction,
+    fact: str
+):
+
+    remember(fact)
+
+    await interaction.response.send_message(
+        f"🧠 Remembered: {fact}"
+    )
+
+
+# ---------------- SLASH: RECALL ----------------
+@bot.tree.command(
+    name="recall",
+    description="View Jarvis memory"
+)
+async def recall_command(
+    interaction: discord.Interaction
+):
+
+    memory = recall()
+
+    if not memory:
+        await interaction.response.send_message(
+            "I don't remember anything yet."
+        )
+        return
+
+    text = "\n".join(
+        f"{i+1}. {item}"
+        for i, item in enumerate(memory)
+    )
+
+    await interaction.response.send_message(
+        f"🧠 Memory:\n\n{text}"
+    )
+
+
+# ---------------- !JARVIS COMMAND ----------------
+@bot.command(name="jarvis")
+async def jarvis(ctx, *, message: str):
+
+    channel_id = ctx.channel.id
+    user_id = ctx.author.id
+
+    add_message(
+        channel_id,
+        "user",
+        message
+    )
+
+    history = get_history(channel_id)
+
+    answer = ask_jarvis(
+        user_id,
+        message,
+        history
+    )
+
+    add_message(
+        channel_id,
+        "assistant",
+        answer
+    )
+
+    if len(answer) > 1900:
+        answer = answer[:1900] + "\n\n[truncated]"
+
+    await ctx.send(answer)
+
 
 # ---------------- RUN BOT ----------------
 bot.run(TOKEN)
