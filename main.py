@@ -5,6 +5,7 @@ from dotenv import load_dotenv
 
 from commands.ask import ask_jarvis
 from commands.memory import remember, recall
+from keep_alive import keep_alive
 from commands.conversation_memory import (
     add_message,
     get_history,
@@ -259,4 +260,5 @@ async def jarvis(ctx, *, message: str):
 
 
 # ---------------- RUN BOT ----------------
+keep_alive()
 bot.run(TOKEN)
