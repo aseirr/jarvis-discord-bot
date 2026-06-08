@@ -1,0 +1,7 @@
+.env
+__pycache__/
+*.pyc
+chat_memory.json
+user_memory.json
+global_facts.json
+user_profile.json
