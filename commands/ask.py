@@ -12,57 +12,110 @@ from commands.conversation_memory import (
 
 load_dotenv()
 
-import os
-
-
-
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url="https://openrouter.ai/api/v1"
 )
 
-MODEL = "openai/gpt-oss-120b"
+# Faster than 120B
+MODEL = "openai/gpt-oss-20b"
+
+# Simple instant-response cache
+FAST_RESPONSES = {
+    "hi": "Hello!",
+    "hello": "Hey!",
+    "hey": "Hey there!",
+    "who are you": "I'm Jarvis.",
+    "good morning": "Good morning!",
+    "good night": "Good night!"
+}
 
 
 def ask_jarvis(user_id: int, question: str, history=None):
 
-    history = history or []
-    history = history[-10:]  # smaller context = faster
+    question_clean = question.lower().strip()
 
-    # ---------------- FAST TOOL CHECK (NO AI CALL) ----------------
+    # ---------------- INSTANT REPLIES ----------------
+    if question_clean in FAST_RESPONSES:
+        return FAST_RESPONSES[question_clean]
+
+    # ---------------- TOOL CHECK ----------------
     tool_result = tool_router(question, user_id)
 
     if tool_result:
         return tool_result
 
-    # ---------------- MINIMAL MEMORY ----------------
-    profile = get_profile(user_id)
+    # ---------------- SMALL HISTORY ----------------
+    history = history or []
+    history = history[-5:]
 
-    facts = recall_facts()[-10:]      # reduced
-    user_mem = get_user_memory(user_id)[-10:]
-    chat_summary = summarize_chat(history)
+    # ---------------- LOAD MEMORY ONLY WHEN NEEDED ----------------
+    memory_keywords = [
+        "remember",
+        "memory",
+        "who am i",
+        "what do you know about me",
+        "what did we talk about",
+        "recall"
+    ]
 
-    # ---------------- SMALLER PROMPT (FASTER TOKENS) ----------------
-    system_prompt = f"""
+    use_memory = any(
+        keyword in question_clean
+        for keyword in memory_keywords
+    )
+
+    if use_memory:
+
+        profile = get_profile(user_id)
+
+        facts = recall_facts()[-5:]
+
+        user_mem = get_user_memory(user_id)[-5:]
+
+        chat_summary = summarize_chat(history)
+
+        system_prompt = f"""
 You are JARVIS.
 
-Profile: {profile.get("summary","")}
+Profile:
+{profile.get("summary","")}
 
-Facts: {facts}
-Memory: {user_mem}
-Chat: {chat_summary}
+Facts:
+{facts}
 
-Be concise.
+User Memory:
+{user_mem}
+
+Recent Chat:
+{chat_summary}
+
+Be concise and helpful.
 """
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": question}
-    ]
+    else:
+
+        system_prompt = """
+You are JARVIS.
+
+Be concise.
+Give direct answers.
+Avoid unnecessary words.
+"""
 
     response = client.chat.completions.create(
         model=MODEL,
-        messages=messages
+        messages=[
+            {
+                "role": "system",
+                "content": system_prompt
+            },
+            {
+                "role": "user",
+                "content": question
+            }
+        ],
+        temperature=0.7,
+        max_tokens=250
     )
 
     return response.choices[0].message.content
