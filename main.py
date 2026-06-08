@@ -132,5 +132,59 @@ async def jarvis(ctx, *, message: str):
     await ctx.send(answer)
 
 
+    
+# ---------------- WAKE WORD SYSTEM ----------------
+@bot.event
+async def on_message(message):
+
+    if message.author.bot:
+        return
+
+    content = message.content.strip()
+
+    # Respond to messages starting with "jarvis"
+    if content.lower().startswith("jarvis "):
+
+        user_message = content[7:].strip()
+
+        if user_message:
+
+            channel_id = message.channel.id
+            user_id = message.author.id
+
+            msg_lower = user_message.lower()
+
+            # Simple commands
+            if "clear chat" in msg_lower:
+                clear_chat(channel_id)
+                await message.reply("🧹 Chat cleared.")
+                return
+
+            if "remember this" in msg_lower:
+                remember_fact(user_message)
+                await message.reply("🧠 Saved to memory.")
+                return
+
+            # AI flow
+            add_message(channel_id, "user", user_message)
+
+            history = get_history(channel_id)
+
+            answer = ask_jarvis(
+                user_id,
+                user_message,
+                history
+            )
+
+            add_message(channel_id, "assistant", answer)
+
+            if len(answer) > 1900:
+                answer = answer[:1900] + "\n\n[truncated]"
+
+            await message.reply(answer)
+
+    # Keep !commands working
+    await bot.process_commands(message)
+
 # ---------------- RUN BOT ----------------
 bot.run(TOKEN)
