@@ -12,6 +12,11 @@ from commands.conversation_memory import (
 
 load_dotenv()
 
+import os
+
+print("DISCORD_TOKEN exists:", bool(os.getenv("DISCORD_TOKEN")))
+print("OPENROUTER_API_KEY exists:", bool(os.getenv("OPENROUTER_API_KEY")))
+
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url="https://openrouter.ai/api/v1"
