@@ -134,6 +134,7 @@ async def jarvis(ctx, *, message: str):
 
     
 # ---------------- WAKE WORD SYSTEM ----------------
+# ---------------- WAKE WORD + MENTION SYSTEM ----------------
 @bot.event
 async def on_message(message):
 
@@ -142,46 +143,70 @@ async def on_message(message):
 
     content = message.content.strip()
 
-    # Respond to messages starting with "jarvis"
-    if content.lower().startswith("jarvis "):
+    triggered = False
+    user_message = ""
 
+    # Wake word
+    if content.lower().startswith("jarvis "):
+        triggered = True
         user_message = content[7:].strip()
 
-        if user_message:
+    # Mention
+    elif bot.user and bot.user.mentioned_in(message):
 
-            channel_id = message.channel.id
-            user_id = message.author.id
+        user_message = content.replace(
+            f"<@{bot.user.id}>",
+            ""
+        ).replace(
+            f"<@!{bot.user.id}>",
+            ""
+        ).strip()
 
-            msg_lower = user_message.lower()
+        triggered = True
 
-            # Simple commands
-            if "clear chat" in msg_lower:
-                clear_chat(channel_id)
-                await message.reply("🧹 Chat cleared.")
-                return
+    if triggered and user_message:
 
-            if "remember this" in msg_lower:
-                remember_fact(user_message)
-                await message.reply("🧠 Saved to memory.")
-                return
+        channel_id = message.channel.id
+        user_id = message.author.id
 
-            # AI flow
-            add_message(channel_id, "user", user_message)
+        msg_lower = user_message.lower()
 
-            history = get_history(channel_id)
+        # ---------------- SIMPLE COMMANDS ----------------
+        if "clear chat" in msg_lower:
+            clear_chat(channel_id)
+            await message.reply("🧹 Chat cleared.")
+            return
 
-            answer = ask_jarvis(
-                user_id,
-                user_message,
-                history
-            )
+        if "remember this" in msg_lower:
+            remember_fact(user_message)
+            await message.reply("🧠 Saved to memory.")
+            return
 
-            add_message(channel_id, "assistant", answer)
+        # ---------------- AI FLOW ----------------
+        add_message(
+            channel_id,
+            "user",
+            user_message
+        )
 
-            if len(answer) > 1900:
-                answer = answer[:1900] + "\n\n[truncated]"
+        history = get_history(channel_id)
 
-            await message.reply(answer)
+        answer = ask_jarvis(
+            user_id,
+            user_message,
+            history
+        )
+
+        add_message(
+            channel_id,
+            "assistant",
+            answer
+        )
+
+        if len(answer) > 1900:
+            answer = answer[:1900] + "\n\n[truncated]"
+
+        await message.reply(answer)
 
     # Keep !commands working
     await bot.process_commands(message)
