@@ -12,8 +12,13 @@ from commands.conversation_memory import (
 
 load_dotenv()
 
+api_key = os.getenv("OPENROUTER_API_KEY")
+
+if not api_key:
+    raise ValueError("OPENROUTER_API_KEY is not set in the environment variables.")
+
 client = OpenAI(
-    api_key=os.getenv("OPENROUTER_API_KEY"),
+    api_key=api_key,
     base_url="https://openrouter.ai/api/v1"
 )
 
