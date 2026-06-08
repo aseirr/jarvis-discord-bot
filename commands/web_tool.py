@@ -1,15 +1,31 @@
+from duckduckgo_search import DDGS
+
+
 def web_search(query: str):
-    """
-    Simulated web search tool.
-    (Later we can replace with real API like SerpAPI or Google CSE)
-    """
 
-    return f"""
-🌐 Web Search Results for: {query}
+    try:
 
-1. Basic explanation about {query}
-2. Common facts and definitions related to {query}
-3. Example use cases of {query}
+        results = []
 
-(Note: This is a simulated web tool. Replace with real API later.)
-"""
+        with DDGS() as ddgs:
+
+            search_results = ddgs.text(
+                query,
+                max_results=5
+            )
+
+            for r in search_results:
+
+                results.append(
+                    f"🔹 {r.get('title', 'No title')}\n"
+                    f"{r.get('body', 'No description')}\n"
+                    f"{r.get('href', '')}"
+                )
+
+        if not results:
+            return "No web results found."
+
+        return "\n\n".join(results)
+
+    except Exception as e:
+        return f"Web search error: {e}"
